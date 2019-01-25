@@ -1,0 +1,496 @@
+﻿*** 웹 프로젝트 실습하기 
+	- 플랫폼을 바꿔 이번엔 웹프로젝트로 AOP를 구현한다.
+	- 콘솔 프로젝트에서 했던 일부 기본 내용을 구현한다.
+	- 어노테이션을 사용해서 구현한다. (XML 스키마 사용하는 법은 위의 콘솔 예제 참조해서 해볼것)
+
+	a. 프로젝트 생성하기
+		New > Other > Spring Legacy Project > Spring MVC Project > "AOPWebTest" > com.test.aop
+	b. pom.xml 의존 파일 설정하기
+		아래의 <dependency> 추가하기 
+		- aspectjweave
+	c. 파일 생성하기
+		- 파일을 생성하고 코드를 작성
+		1. src/main/java > com.test.aop > AOPController (주 컨트롤러)
+		2. src/main/java > com.test.aop > ICore 인터페이스 생성
+		3. src/main/java > com.test.aop > Core 클래스 생성 (주 업무 담당, 서비스 객체)
+		4. src/main/java > com.test.aop > Cross 클래스 생성 (보조 업무 담당)
+		5. webapp > WEB-INF > views > aop.jsp 페이지 생성 (뷰 페이지)
+	d. 실행
+		- MainTest.main() 실행하기
+
+[pom.xml]
+
+<dependencies>
+	
+	..
+
+	<dependency>
+		<groupId>org.aspectj</groupId>
+		<artifactId>aspectjweaver</artifactId>
+		<version>${org.aspectj-version}</version>
+	</dependency>
+</dependencies>	
+
+
+[servlet-context.xml]
+
+<beans:beans ..
+	xsi:schemaLocation="..
+		http://www.springframework.org/schema/aop //추가
+		http://www.springframework.org/schema/aop/spring-aop.xsd" //추가
+	xmlns:aop="http://www.springframework.org/schema/aop"	> //추가
+
+	..
+
+	<aop:aspectj-autoproxy />
+	
+</beans:beans>
+
+
+[ICore.java]
+
+public interface ICore {
+
+	//주업무
+	String get(int seq);
+	
+}
+
+
+[Core.java]
+
+@Service
+public class Core implements ICore {
+
+	@Override
+	public String get(int seq) {
+		
+		// DB(DAO)로부터 데이터를 가져왔다고 가정하에 진행하겠다.
+		
+		String data = "";
+		
+		if (seq == 1) 
+			data = "한석규";
+		else if (seq == 2) 
+			data = "두석규";
+		else if (seq == 3) 
+			data = "세석규";
+				
+		return data;
+		
+	}
+	
+}
+
+
+[AOPController.java] - 컨트롤러
+
+@Controller
+public class AOPController {
+	
+	@Autowired
+	ICore core;
+	
+	@RequestMapping(method={RequestMethod.GET}, value="/get.action")
+	public String get(HttpServletRequest request) {
+		
+		Random rnd = new Random();
+		
+		int seq = rnd.nextInt(3) + 1;  
+		// 결국 seq 는 1 또는 2 또는 3 중 하나의 값을 랜덤하게 가진다. 
+		/*
+		 Random 클래스의 nextInt() 메소드에 파라미터를 입력하지 않으면 
+		 int형 표현 범위(-2147483648 ~ 2147483647)의 모든 영역에서 랜덤한 숫자가 나온다.
+                 그런데 int형 파라미터를 입력하면, 0에서 그 파라미터 미만의 랜덤한 정수를 반환한다.
+                 예를 들어, nextInt(10) 이렇게 하면 0~9까지의 랜덤한 숫자가 나온다. 
+		*/
+		
+		String data = core.get(seq);
+		
+		request.setAttribute("data", data);
+		
+		return "aop";
+	}
+
+}
+
+
+[Cross.java]
+
+@Aspect
+public class Cross {
+	
+	//아직 미구현
+	
+}
+
+
+[aop.jsp]
+
+<body>
+	
+	<h1>뷰페이지</h1>
+	data : ${data}님
+	
+</body>
+
+
+{실행결과}
+
+뷰페이지
+
+data : 두석규님
+
+>>>>>> 랜덤하게 데이터를 반환하는 주업무 객체를 사용해 웹페이지를 생성한다. 
+아직 보조업무 객체는 구현하지 않았다.
+
+
+	e. 보조업무 구현하기
+		- 서비스 객체 Core의 get() 메소드를 Pointcut으로 지정한다.
+		- Before Advice와 After Returning Advice를 연결시킨다.
+		1. Cross.java 내용 추가하기
+
+[Cross.java]
+
+@Aspect    // 관심 객체로 등록한다.
+	       // - 기존의 XML <aop:aspect> 역할을 한다.
+@Component 
+              // XML에서 빈을 만드는 대신에 클래스명 앞에 
+	      // @Component 어노테이션을 적어주면 해당 클래스는 bean으로 자동 등록된다. 
+              // 그리고 bean의 이름은 해당 클래스명(첫글자는 소문자)이 된다.
+public class Cross {
+	
+	@Pointcut("execution(* com.test.aop.Core.*(..))")
+	public void pc1() {
+				
+	}
+	
+	@Before("pc1()")
+	public void before(JoinPoint joinPoint) {
+		
+		System.out.println("보조업무가 실행됩니다.");
+		
+	}
+	
+	@AfterReturning(pointcut="pc1()", returning="data")
+	public void afterreturning(JoinPoint joinPoint, Object data) {
+		
+		Calendar now = Calendar.getInstance();
+		System.out.printf("[%tF %tT] %s 를 요청했습니다.\n", now, now, data);
+		
+	}
+	
+}
+
+{실행결과}
+
+뷰페이지
+
+data : 한석규님
+
+보조업무가 실행됩니다.
+[2016-09-05 16:52:31] 한석규 를 요청했습니다.
+
+>>>>>>원하는 Advice를 연결하는 방법은 콘솔 프로젝트와 동일하다.
+
+
+	f. 회원만 사용한 전용 기능에 대해서 인증받지 못한 사용자를 특정 페이지로 리디렉트 시키는 보조 업무를 구현한다.
+		- 서비스 객체 Core의 get() 메소드를 Pointcut으로 지정한다.
+		1. pom.xml 내용 추가하기
+		2. AOPController.java 내용 추가하기
+		3. views > index.jsp 만들기
+		4. views > auth > anonymouse.jsp 만들기
+		5. views > auth > member.jsp 만들기
+		6. views > member > info.jsp 만들기
+		7. views > member > my.jsp 만들기
+
+[pom.xml]
+
+<dependencies>
+	
+	..
+
+	<dependency>
+		<groupId>cglib</groupId>
+		<artifactId>cglib</artifactId>
+		<version>2.2</version>
+	</dependency>
+</dependencies>	
+
+
+[AOPController.java]
+
+@Controller
+public class AOPController {
+	
+	..	
+	
+	// 로그인한 회원만 사용하는 전용 기능에 대해서 
+	// 인증받지 못한 사용자는 특정 페이지로 리디렉트 시키는 
+	// 보조 업무를 구현한다.
+	
+	// 시작 페이지
+	@RequestMapping(value="/index.action", method={RequestMethod.GET})
+	public String index(HttpServletRequest request) {
+				
+		return "index";
+	}
+	
+	
+	//이 페이지를 통해서 접속하면 인증을 받았다고 가정한다.
+	@RequestMapping(value="/auth/member.action", method={RequestMethod.GET})
+	public String authmember(HttpServletRequest request, HttpSession session) {
+		
+		//로그인 성공!!
+		session.setAttribute("loginuser", "hongkd"); // session.setAttribute("loginuser", mvo);
+		
+		return "auth/member";
+	}	
+		
+		
+	//이 페이지를 통해서 접속하면 인증을 받지 않았다고 가정한다.
+	@RequestMapping(value="/auth/anonymous.action", method={RequestMethod.GET})
+	public String authanonymous(HttpServletRequest request, HttpSession session) {
+		
+		//혹시 인증 티켓이 남아 있으면 강제로 로그아웃
+		session.removeAttribute("loginuser");
+		// session.invalidate();
+		
+		return "auth/anonymous";
+	}	
+	
+		
+	//회원 전용 페이지 1
+	@RequestMapping(value="/member/info.action", method={RequestMethod.GET})
+	public String memberinfo(HttpServletRequest request, HttpServletResponse response) {
+		
+		return "member/info";
+	}
+		
+	//회원 전용 페이지 2
+	@RequestMapping(value="/member/my.action", method={RequestMethod.GET})
+	public String membermy(HttpServletRequest request, HttpServletResponse response) {
+		
+		return "member/my";
+	}	
+		
+		
+	// 메시지 페이지
+	@RequestMapping(value="/msg.action", method={RequestMethod.GET})
+	public String msg(HttpServletRequest request) {
+				
+		return "msg";
+	}
+
+}
+
+
+[index.jsp]
+<head>
+<meta charset="UTF-8">
+<title>시작 페이지</title>
+<style type="text/css">
+	a {text-decoration: none;}
+</style>
+</head>
+<body>
+	
+	<h1>시작 페이지</h1>
+	
+	<p>
+		<a href="<%= request.getContextPath() %>/auth/member.action">회원으로 접속하기(로그인 페이지)</a>
+		<br/>
+		<a href="<%= request.getContextPath() %>/auth/anonymous.action">비회원으로 접속하기(로그아웃 페이지)</a>
+	</p>
+	
+</body>
+
+
+[anonymouse.jsp]
+
+<head>
+<meta charset="UTF-8">
+<title>누구나 페이지</title>
+<style type="text/css">
+	a {text-decoration: none;}
+</style>
+
+<script type="text/javascript">
+	alert("로그인을 안했거나 로그아웃 됨~~~");
+</script>
+
+</head>
+<body>
+	<h1>누구나 페이지</h1>
+	<p>로그인을 하지 않은 상태입니다.</p>
+	<p>
+		<a href="<%= request.getContextPath() %>/member/info.action">회원 전용 페이지로 이동합니다.(info)</a>
+		<br/>
+		<a href="<%= request.getContextPath() %>/member/my.action">회원 전용 페이지로 이동합니다.(my)</a>
+	</p>
+</body>
+
+
+
+[member.jsp]
+
+<head>
+<meta charset="UTF-8">
+<title>회원 페이지</title>
+<style type="text/css">
+	a {text-decoration: none;}
+</style>
+
+<script type="text/javascript">
+	alert("로그인 성공!!");
+</script>
+
+</head>
+<body>
+	<h1>회원 페이지</h1>
+	
+	<p>ID명 <span style="color:red;">${sessionScope.loginuser}</span> 으로 로그인 성공한 상태입니다.</p>
+	
+	<p>
+		<a href="<%= request.getContextPath() %>/member/info.action">회원 전용 페이지로 이동합니다.(info)</a>
+		<br/>
+		<a href="<%= request.getContextPath() %>/member/my.action">회원 전용 페이지로 이동합니다.(my)</a>
+	</p>
+	<p>
+		<a href="<%= request.getContextPath() %>/auth/anonymous.action">로그아웃</a>
+	</p>
+</body>
+
+
+[info.jsp]
+
+<head>
+<meta charset="UTF-8">
+<title>회원 전용 정보 페이지(info)</title>
+<style type="text/css">
+	a {text-decoration: none;}
+</style>
+</head>
+<body>
+	<h1>회원 전용 정보 페이지(info)</h1>
+	
+	<span style="color: blue;"> 로그인유저 ID : ${sessionScope.loginuser} </span>
+	<p>
+		<a href="<%= request.getContextPath() %>/auth/anonymous.action">로그아웃</a>
+	</p>
+</body>
+
+
+[my.jsp]
+
+<head>
+<meta charset="UTF-8">
+<title>회원 전용 개인 페이지(my)</title>
+<style type="text/css">
+	a {text-decoration: none;}
+</style>
+</head>
+<body>
+	<h1>회원 전용 개인 페이지(my)</h1>
+	
+	<span style="color: red;">로그인유저 ID : ${sessionScope.loginuser}</span>
+	<p>
+		<a href="<%= request.getContextPath() %>/auth/anonymous.action">로그아웃</a>
+	</p>
+</body>
+
+
+[Cross.java]
+
+@Aspect
+@Component
+public class Cross {
+	
+	..
+
+	// 로그인 되어진 회원만 접근이 가능하도록 하는 메소드들을 Pointcut으로 선언한다.
+	// - AOPController.memberinfo() : 회원 정보 전용 페이지
+	// - AOPController.membermy()   : 회원 개인 전용 페이지
+	@Pointcut("execution(* com.test.aop.AOPController.member*(..))")  
+	                                                       // .. 은 파라미터의 갯수가 0개 이상인것을 말한다.
+	public void member() {
+					
+	}
+		
+	//회원 기능 Pointcut에 사전 보조업무를 추가한다.
+	// - 인증 받지 못한 사용자는 회원 전용 페이지에 접속할 수 없다.
+	@Before("member()")
+	public void memberbefore(JoinPoint joinPoint) {
+			
+		System.out.println("회원 전용 페이지 요청에 한해서 실행됩니다.");
+			
+		//로그인 유무를 확인하기 위해서 request를 통해 session을 얻어온다.
+		HttpServletRequest request = (HttpServletRequest)joinPoint.getArgs()[0];
+		HttpSession session = request.getSession();
+			
+			System.out.println(" >>> 확인용 로그인유저 ID : " + session.getAttribute("loginuser"));
+			
+		HttpServletResponse response = (HttpServletResponse)joinPoint.getArgs()[1];
+			
+		//보조업무 구현
+		// - 해당 요청자가 인증받지 못한 상태라면 회원 전용 페이지에 접근할 수 없기에 다른 페이지로 강제 이동시킨다.
+		if (session.getAttribute("loginuser") == null || session.getAttribute("loginuser").equals("")) {
+			try {
+				String msg = "먼저 로그인 하세요~~";
+				String loc = "/aop/index.action";
+				request.setAttribute("msg", msg);
+				request.setAttribute("loc", loc);
+			
+				RequestDispatcher dispatcher = request.getRequestDispatcher("/WEB-INF/views/msg.jsp");
+				dispatcher.forward(request, response);
+					 
+				// response.sendRedirect("/aop/index.action");
+			} catch (ServletException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}// end of if------------------
+			
+	}// end of memberbefore(JoinPoint joinPoint)------------
+
+}
+
+
+
+[msg.jsp]
+
+<head>
+<meta charset="UTF-8">
+<title>메시지 출력후 페이지 이동시키기</title>
+
+<script type="text/javascript">
+	alert("${msg}");
+	location.href="${loc}";
+</script> 
+
+</head>
+<body>
+
+</body>
+
+
+{시나리오}
+
+사례 A.
+	1. 현재 접속자는 회원이다. 자신의 회원 정보를 보려고 한다.
+	2. 시작 페이지(http://localhost:9090/aop/index.action)에 접속한다.
+	3. 로그인을 하기 위해 [회원으로 접속하기]를 선택한다.
+	4. 로그인을 성공적으로 마치고 자신의 정보를 보기위해 [회원 전용 페이지로 이동합니다.(my)]를 선택한다.
+	5. 이미 인증을 받고 난 뒤 접근했기 때문에 성공적으로 회원 전용 페이지에 접속된다.
+
+사례 B.
+	1. 현재 접속자는 비회원이다. 하지만 회원만 접근 가능한 페이지에 접속을 시도한다.
+	2. 시작 페이지(http://localhost:9090/aop/index.action)에 접속한다.
+	3. 시연상 비회원임을 처리하기 위해 [비회원으로 접속하기]를 선택한다.
+	4. 인증받지 못한 상태에서 뒷구멍(?)으로 알아낸 회원 전용 페이지 주소에 접근하려고 시도한다.
+	   [회원 전용 페이지로 이동합니다.(info)]를 선택한다.
+	5. 회원 관련 모든 페이지에 Before Advice 보조업무가 적용되어 있기 때문에 인증받지 못한 사용자는 
+	   구분되어 강제적으로 시작페이지로 이동된다.
+
+긴 페이지 여기까지 보시느라 수고들 많으셨습니다. 감사합니다.
